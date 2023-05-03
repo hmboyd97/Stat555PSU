@@ -1,0 +1,189 @@
+---
+title: "HW3"
+author: "Hannah Boyd"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+# Question 1
+
+```{r}
+url<-"https://raw.githubusercontent.com/genomicsclass/dagdata/master/inst/extdata/babies.txt"
+library(utils)
+library(dplyr)
+filename<- basename(url)
+download.file(url,destfile=filename)
+babies<-read.table("babies.txt",header=TRUE)
+bwt.nonsmoke<-filter(babies,smoke==0)%>%select(bwt)%>%unlist
+bwt.smoke<-filter(babies,smoke==1)%>%select(bwt)%>%unlist
+```
+
+## Part 1
+
+```{r}
+N = 10
+set.seed(1)
+nonsmokers <- sample(bwt.nonsmoke , N)
+smokers <- sample(bwt.smoke , N)
+obs <- mean(smokers) - mean(nonsmokers)
+```
+
+```{r}
+dat <- c(smokers,nonsmokers)
+shuffle <- sample( dat )
+smokersstar <- shuffle[1:N]
+nonsmokersstar <- shuffle[(N+1):(2*N)]
+mean(smokersstar)- mean(nonsmokersstar)
+```
+```{r}
+obs <- mean(smokers) - mean(nonsmokers)
+
+FUN <- function(dat){
+     N <-  length(dat) / 2
+     dat <- c(smokers,nonsmokers)
+     shuffle <- sample( dat )
+     smokersstar <- shuffle[1:N]
+     nonsmokersstar <- shuffle[(N+1):(2*N)]
+     mean(smokersstar)-mean(nonsmokersstar)
+ }
+
+set.seed(1)
+permuted <- replicate(999,FUN(dat))
+dist <- append(permuted,obs)
+
+p.value <- sum(dist <= obs) / 1000
+p.value
+```
+**Answer: The p value for a 1,000 permutations of the mean is 0.051.** 
+
+## Part II
+
+```{r}
+obs <- median(smokers) - median(nonsmokers)
+    
+FUN <- function(dat){
+     N <-  length(dat) / 2
+     dat <- c(smokers,nonsmokers)
+     shuffle <- sample( dat )
+     smokersstar <- shuffle[1:N]
+     nonsmokersstar <- shuffle[(N+1):(2*N)]
+     median(smokersstar)-median(nonsmokersstar)
+ }
+
+set.seed(1)
+permuted <- replicate(999,FUN(dat))
+dist <- append(permuted,obs)
+p.value <- sum(dist <= obs) / 1000
+p.value
+```
+
+**Answer: The p value for 1,000 permutation of the median is 0.128**
+
+# Question 2 
+
+```{r}
+library(datasets)
+data("ChickWeight")
+head(ChickWeight)
+plot(ChickWeight$Time, ChickWeight$weight, col=ChickWeight$Diet)
+chick = reshape(ChickWeight, idvar=c("Chick","Diet"), timevar="Time",direction="wide")
+chick = na.omit(chick)
+chick$weight.4
+```
+
+## Part 1A
+
+```{r}
+day4 <- chick$weight.4
+day4plus <- c(day4,3000)
+mean(chick$weight.4)
+mean(day4plus)
+mean(day4plus)-mean(chick$weight.4)
+```
+
+**Answer:The mean increases by 63.90966 with the addition of the outlier.**
+
+## Part 1B
+
+```{r}
+median(day4plus)
+median(chick$weight.4)
+median(day4plus)-median(chick$weight.4)
+```
+
+**Answer: The median does not increase with the addition of the outlier.**
+
+## Part1C
+
+```{r}
+sd(day4plus)
+sd(chick$weight.4)
+sd(day4plus)-sd(chick$weight.4)
+```
+
+**Answer: the standard deviation increases by 429.1973 with the addition of the outlier.**
+
+## Part1D
+
+```{r}
+mad(day4plus)
+mad(chick$weight.4)
+mad(day4plus)-mad(chick$weight.4)
+```
+
+**Answer: the median absolute deviation does not increase with the addition of the outlier**
+
+## Part 2A
+
+```{r}
+x <- chick[chick$Diet==1,"weight.4"]
+y <- chick[chick$Diet==4,"weight.4"]
+t.test(x,y)
+```
+
+```{r}
+wilcox.test(x,y)$p.value
+```
+
+## Part 3
+
+```{r}
+set.seed(38011)
+avgdiff <- replicate(1000, {
+    dat <- c(x,y)
+    shuffle <- sample(dat) 
+    xstar <- shuffle[1:N] 
+    ystar <- shuffle[(N+1):(2*N)]
+    return(mean(xstar)-mean(ystar))})
+ 
+(sum(abs(avgdiff) > abs(obs)) + 1) / (length(avgdiff) + 1)
+```
+
+
+**Answer: The permutation pvalue is larger than the p value for the t test (7.32e-06) or the wilcox test (0.0002011939)**
+
+## Part 4
+
+```{r}
+yplus<-c(y,1000)
+t.test(x,yplus)
+```
+
+**Answer: The outlier increased the p value for both the t test and the wilcox test.**
+
+
+## Part 5
+
+```{r}
+set.seed(58381)
+avgdiff <- replicate(1000, {
+dat <- c(x,y)
+shuffle <- sample(dat) 
+xstar <- shuffle[1:N] 
+ystar <- shuffle[(N+1):(2*N)]
+return(mean(xstar)-mean(ystar))})
+(sum(abs(avgdiff) > abs(obs)) + 1) / (length(avgdiff) + 1)
+
+```
+
+**Answer: The p value did not change despite the set.seed value changing.The permutation pvalue is larger than the p value for the t test (7.32e-06) or the wilcox test (0.0002011939) from the dataset without the outlier.**

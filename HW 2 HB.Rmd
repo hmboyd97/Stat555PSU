@@ -1,0 +1,158 @@
+---
+title: "HW2"
+author: "Hannah Boyd"
+date: "`r Sys.Date()`"
+output:
+  html_document: default
+---
+```{r}
+library(rafalib)
+library(dplyr)
+library(downloader)
+url<-"https://raw.githubusercontent.com/genomicsclass/dagdata/master/inst/extdata/mice_pheno.csv"
+filename<-basename(url)
+download(url,destfile=filename)
+dat<-na.omit(read.csv(filename))
+```
+
+# Question 1
+
+## Part a
+
+```{r}
+pnorm(1)-pnorm(-1)
+```
+
+**Answer: 0.6826895 are within one standard deviation**
+
+## Part b
+
+```{r}
+pnorm(2)-pnorm(-2)
+```
+
+**Answer: 0.9544997 are within two standard deviations**
+
+## Part c
+
+```{r}
+pnorm(3)-pnorm(-3)
+```
+
+**Answer: 0.9973002 are within three standard deviations**
+
+# Question 2
+
+```{r}
+y <- dat %>% filter(Sex == 'M' & Diet == 'chow')%>% dplyr::select(Bodyweight) %>% unlist()
+mean(y) 
+popsd(y)
+z_score <- (y - mean(y))/popsd(y)
+
+```
+
+## Part a
+
+```{r}
+mean(abs(z_score)<= 1)
+```
+
+**Answer: 0.6950673 are the proportion of mice within one SD from the average weight**
+
+## Part b
+
+```{r}
+mean(abs(z_score)<= 2)
+```
+
+**Answer: 0.9461883 are the proportion of mice within two SD from the average weight**
+
+## Part c
+
+```{r}
+mean(abs(z_score)<= 3)
+```
+
+**Answer: 0.9910314 are the proportion of mice within three SD from the average weight**
+
+# Question 3
+
+```{r}
+mypar(1,1)
+qqnorm(y)
+qqline(y)
+```
+
+**Answer: C.) The mouse weights are well approximated by the normal distribution, although the larger values (right tail) are larger than predicted by the normal** 
+
+# Question 4
+
+## Part a
+
+```{r}
+y <- filter(dat, Sex=="M" & Diet=="chow") %>% dplyr::select(Bodyweight) %>% unlist
+avgs <- replicate(10000, mean( sample(y, 25)))
+mypar(1,2)
+hist(avgs)
+qqnorm(avgs)
+qqline(avgs)
+```
+
+## Part b 
+```{r}
+m <- 10000
+n <- 25
+y <- filter(dat, Sex=='M' & Diet=='chow') %>%dplyr::select(Bodyweight) %>% unlist() 
+set.seed(1)
+avg_list <- replicate(m,{ + mean(sample(y,25))})
+mypar(1,2)
+hist(avg_list)
+qqnorm(avg_list)
+qqline(avg_list)
+mean(avg_list)
+```
+
+**The average of the distribution of the sample average is 30.96856.**
+
+## Part c
+
+```{r}
+popsd(avg_list)
+```
+
+**Answer: The standard deviation is 0.827082**
+
+## Part d
+
+```{r}
+popsd(y)/sqrt(25)
+```
+
+**Answer: D**
+
+# Question 5
+
+```{r}
+m <- 10000
+set.seed(1)
+sd_list <- replicate(m,{sd(sample(y,25))})
+mypar(1,1)
+hist(sd_list)
+mean(sd_list <= 3.5)
+```
+
+**Answer: The proportion below 3.5 is 0.0942.**
+
+# Question 6
+
+```{r}
+x = seq(0.0001, 0.9999, len = 300)
+df_list <- c(3,10,30,100)
+mypar(2,2)
+for (i in seq_along(df_list)) {
+qqnorm(qt(x,df_list[i]), main = df_list[i])}
+```
+
+**Answer: C** 
+
+

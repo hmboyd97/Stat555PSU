@@ -1,0 +1,96 @@
+---
+title: "HW7"
+author: "Hannah Boyd"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+# **Starting Code**
+```{r}
+url <- "https://raw.githubusercontent.com/genomicsclass/dagdata/master/inst/extdata/spider_wolff_gorb_2013.csv"
+filename <-"spider_wolff_gorb_2013.csv"
+library(downloader)
+if(!file.exists(filename))download(url,filename)
+spider<-read.csv(filename,skip=1)
+
+library(contrast)
+```
+
+# Question 1 Part 1
+
+```{r}
+condition <- factor(c("treated","treated","treated","treated","treated","treated","control","control","control","control","control","control"))
+day<- factor(c("d1","d1","d2","d2","d3","d3","d1","d1","d2","d2","d3","d3"))
+
+table(condition,day)
+```
+
+```{r}
+model.matrix(~day + condition)
+```
+## **Answer: A - Day + Condition**
+
+## Question 1 part 2 
+
+## **Answer: There are four columns in the design matrix**
+
+# Question 2
+
+```{r}
+spider
+fitTL <- lm(friction ~ leg + type, data=spider)
+summary(fitTL)
+```
+```{r}
+(coefs <- coef(fitTL))
+```
+## **Question 2 part 1**
+
+
+```{r}
+library(contrast) 
+L4vsL2 <- contrast(fitTL,list(leg="L1",type="pull"),list(leg="L2",type="pull"))
+L4vsL2$testStat
+```
+
+## **Question 2 part 2**
+
+```{r}
+library(contrast) 
+L4vsL2 <- contrast(fitTL,list(leg="L4",type="pull"),list(leg="L2",type="pull"))
+L4vsL2$testStat
+```
+
+# Question 3
+
+```{r}
+spider$log2friction<-log2(spider$friction)
+
+boxplot(log2friction~type*leg,data=spider)
+```
+## **Question 3 part 1**
+```{r}
+fitln <- lm(log2friction ~ type*leg, data=spider)
+summary(fitln)
+```
+### **Answer: -3.689***
+
+
+## **Question 3 part 2**
+
+### **Answer: Since the test value is sufficiently large we can reject the null hypothesis**
+
+## **Question 3 part 3**
+
+```{r}
+contrast(fitln, list(type="pull",leg="L2"), list(type="pull",leg="L3"))
+```
+```{r}
+coef(fitln)["legL2"]
+```
+# **Question 4**
+
+```{r}
+anova(fitln)
+```
+## Answer: The F value is 10.701**

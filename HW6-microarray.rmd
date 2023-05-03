@@ -1,0 +1,294 @@
+---
+title: "Microarray Differential Expression"
+author: "STAT 555"
+date: "Mar. 24, 2019"
+output: html_document
+---
+
+## Instructions
+
+(1) Your homework response should be a revised version of this document, named "YourNameHW6.Rmd" and the resulting html file, "YourNameHW6.html" - for example, "ChenHW6.Rmd" and "ChenHW6.html".
+(2) Remember to remove "STAT 555" and add your name along with your email in the title lines of the document.
+You should take out the unnecessary text, but leave in the homework questions and your answers.
+(3) In this homework, we will use some R functions that you may not know before (e.g: RMA, hexplom). Type "?function_name" in R console for instruction and examples.
+(4) Download required packages before dong your homework: "hexbin", "affy", "limma" and "qvalue"
+(5) Show your code by inserting R chunk
+(6) Points will be deducted for failure to follow these instructions.
+
+---
+
+## Preparations
+
+To set things up we will load all the required Bioconductor libraries.  
+
+```{r,message=FALSE}
+rm(list=ls(all=TRUE));
+require(hexbin)
+require(affy)
+require(limma)
+require(qvalue)
+```
+
+
+Khaitovich et al (2004) considered gene expression in 7 homologous regions of human and chimpanzee brains. There were 3 human brains and 3 chimpanzee brains available for the study. Each brain was dissected to obtain tissue samples for each of the 7 regions.  This is called a split plot design.
+
+In a split plot design, the subplot factor - in this case the brain region - is arranged in randomized complete block design.  The individual brains are the blocks.  However, the blocks themselves also have a factor - in this case species.  The interaction between species and region is also considered a subplot effect.  In an ANOVA with a single response, we would have different estimate of the SD when testing hypotheses about the whole plot and subplot errors.  *limma* gets around this by estimating the ratio of these two errors (the intra-class correlation) and then using the correlation to estimate the appropriate standard errors for the contrasts.
+
+The factors "species" and "region" are arranged in a balanced factorial design, because each combination of species and region was sampled with the same number of biological replicates.  However, there is also a blocking factor "brain" with 6 levels representing the 6 individuals.
+ 
+The samples were hybridized to a variety of Affymetrix@ Genechips and are available as experiment E-AFMX-2 at
+http://www.ebi.ac.uk//aerep//dataselection//?expid=352682122.  We will use only 4 of the brain regions: prefrontal cortex, caudate nucleus, cerebellum and Broca's region and only one of the Genechips, hgu95b with one hybridization per sample.
+
+The CEL files was put on CANVAS.  You will need to download the files into a folder and unzip so that the .CEL files are visible.
+
+Read the cel files into an AffyBatch object called **brainBatch**. You can do this from any directory by telling *ReadAffy* which directory the CEL files are in using the input parameter **celfile.path**. I have the cel files in directory **D:/R_work/STAT555_sp/hw3/brain/**.  The commands are below.  You need to replace this with your own directory.
+
+To start, we need to load the data into R and do some basic quality assessment. The *ReadAffy* command finds all the CEL files and reads them in an object called an *AffyBatch*.   
+
+```{r}
+celPath="D:/R_work/STAT555_sp/hw3/brain/"
+brainBatch=ReadAffy(celfile.path=celPath)
+```
+
+
+The sample names for *brainBatch* are the CEL file names, which are not informative.We will replace them with more informative names, and thenextract the probewise raw expression values for quality assessment. The *paste* and *rep* command are very handy for creating names. The microarray names are coded "a_xny" where "n" is the replicate number, x is either "c" for chimpanzee or "h" for human, and the brain regions are a) prefrontal cortex, d) caudate nucleus e) cerebellum or f) Broca's region.
+First print the sampleNames to be sure the microarrays are in the right order.  Then replace the names with the more informative names. 
+
+```{r}
+sampleNames(brainBatch)
+sampleNames(brainBatch) <- 
+  paste(rep(c("CH","HU"),each=12),rep(c(1:3,1:3),each=4),
+  rep(c("Prefrontal","Caudate","Cerebellum","Broca"),6),sep="")
+sampleNames(brainBatch)
+```
+
+
+---
+
+## EDA and Normalization
+
+We should at minimum check quality by doing some scatterplot matrices of the log2(expression) values. An *AffyBatch* is a special type of *expressionSet* object, so all the commands used for *expressionSet*s are available.  In particular, the *exprs* command will extract the 409600 probe by 24 microarray of probewise expression values.  
+
+A scatterplot matrix is very useful for drawing all pairs of scatterplots for the columns of a data matrix. However, the points on the scatterplot overplot into a black blob if there are too many of them. The hexbin package can be used to provide scatterplots that show the density of data values on the plot. *plot(hexbin(x,y))* yields the density version of *plot(x,y)* and *plot(hexplom(matrix))* yields the scatterplot matrix.
+
+To look at 409600 expression values, we will need to use *hexplom* . There are a lot of samples to check. It is convenient to do them by brain region, as this would give 6 plots at a time with gene expression we might expect to be roughly comparable (at least within species.)   
+
+Here is an example of *hexplom* plot for Prefrontal Cortex
+
+```{r hexplom brain region}
+Prefrontal=log2(exprs(brainBatch[,c(1,5,9,13,17,21)]))
+plot(hexplom(Prefrontal))
+```
+
+
+---
+
+**Question 1:**
+
+**Draw *hexplom* plots for each brain region.  Do any of the microarrays appear to be different than the others (within region)?**
+
+
+---
+
+We should set up the treatment names and blocks.  This is readily done using *paste* and *rep*.  The treatment names are the same as the sample names, but the replicate numbers are dropped. There is one block label for each brain.
+
+---
+
+**Question 2:**
+
+**a) Create a variable *blocks* which has labels for each subject.  This will need to be in the same order as the samples. For example, each of the 4 brain samples for Human subject 1 should be labeled HU1. Print out the values.**
+
+**b) Create a variable *trts* which has labels for each combination of species and brain region.  For example, each of the 3 human cerebellum samples should be labeled HUCerebellum. Print out the values.**
+
+---
+
+The next step is to normalize the expression values and combine into probeset expression summaries using RMA. This can be done authomatically by applying the *rma* function directly to the *AffyBatch* (not the expression values). Note that the *AffyBatch* stores the probeset information while the expression values are only the intensity of each probe.  
+
+The output of *rma* is also an expressionSet.  Name it *brain.rma*.
+
+---
+ 
+**Question 3:**
+
+**a) Normalize the expression values and combine into probeset summaries using RMA.**
+
+**b) How many probeset summaries are there?  i.e. How many probesets are represented on the array?**
+
+**c) Redo the *hexplom* plots. (Note that the *rma* command creates an *expressionSet*.  You need to use the *exprs* command to get the actual expression values.) Are there any obvious problems with the data?**
+
+---
+
+We are now ready to perform analysis in *limma*. The steps are:
+
+
+* Compute the intraclass correlation among regions from the same brain (averaged across all the genes and all the brains.)
+* Compute \(S^2_p\) the pooled variance for each gene.  
+* Create the coefficient matrix for the contrasts.
+* Compute the estimated contrasts.
+* Compute the moderated contrast t-test for each gene.
+* Create the list of significant genes based on the p-values, adjusted p-values or FDR estimates.
+
+
+We will go through these steps below. There are some additional homework problems scattered throughout the directions. 
+
+
+## Compute \(S^2_p\)
+
+There are 3 steps to computing the pooled variance.
+
+* Create a design matrix for the treatment effects.
+* If there are blocks, compute the within block correlation for each gene.
+* Fit the model for the treatment effects to obtain the pooled variance.
+
+
+A design matrix is a matrix whose columns are the indicator variables for the effects. There is one row for each sample. We are going to set up the cell means model, so we will have an indicator variable for each brain region in each species.  We have already set up the *trts* variable to help us with this. This is where the idea of *factors* in R comes in handy.  When R sees an equation with a factor (or a character vector) it knows that you want to create an indicator variable for each level of the factor.
+
+The *model.matrix* command sets up the design matrix.  By default there is a column of 1's for the intercept.  In the cell means model there is no intercept.  We indicate this by putting "0+" as the leading part of our model formula.
+
+```{r,eval=F}
+design.trt=model.matrix(~0+trts)
+```
+
+---
+
+**Question 4:**
+
+**a) Each row of the design matrix represents a treatment. Print out the design matrix. How many 1's are in each row?  Why? **
+
+**b) Why does the matrix have 8 columns? **
+
+---
+
+If there are blocks or technical replicates the correlation of genes within the blocks needs to be computed.  This requires the design matrix and  the blocking factor. In our case, the blocking factor is called *blocks*. 
+
+```{r,eval=F}
+corfit <- duplicateCorrelation(brain.rma, design.trt, block = blocks)
+```
+
+
+The within-block correlation for each gene is stored on as hyperbolic arctan(correlation) in a component called *atanh.correlations*.  A consensus correlation is computed by discarding the most extreme outliers, averaging the remainder on the hyperbolic arctan scale, and then transforming back to a correlation. This is stored in component
+*consensus.correlation*.*limma* assumes that the correlation induced by the blocks is the same for all genes and uses the consensus. 
+
+---
+
+**Question 5:**
+ 
+**To obtain a histogram of the correlations, you need to use the *tanh(corfit\$atanh.correlations)* function. Plot the histogram of intraclass correlations and also print out the consensus correlation. Does the consensus correlation seem reasonable given the histogram?**
+
+
+---
+
+## Pooled within treatment variance
+
+We are now ready to compute the pooled sample variance for each gene.  
+As a side effect, we also compute the sample mean expression of each gene in each treatment (remembering that after RMA normalization, the data are on the log2 scale).
+We do this by fitting the linear model, giving the treatments (for estimating the means), the blocking factor (to tell *limma* which observations should be correlated) and the consensus correlation.
+
+```{r,eval=F}
+fitTrtMean <- lmFit(brain.rma, design.trt, block = blocks, 
+                    cor = corfit$consensus.correlation)
+```
+
+The output *fitTrtMean* has several components, but only 2 of these are of interest. Component *coefficients* contains the mean expression for each gene in each treatment.  Component *sigma* has the estimate of \(S_p\).  (Notice this the pooled SD, not the pooled variance.)
+
+---
+
+**Question 6:**
+
+**a) Draw a histogram of the first coefficient.  What is the interpretation of this coefficient in terms of gene expression?**
+
+**b) Draw a histogram of the estimated pooled variance \(S_p^2\).  Does it have the characteristic skewed shape?  (Having about 100 bins might help you in visualizing the histogram.)**
+
+---
+
+The resulting contrast c## Create the coefficient matrix for the contrasts
+
+We need to compute the coefficient matrix for any contrasts we want to do.  We will obtain the pooled variances from *fitTrtMean*.
+
+We need to decide what contrasts are interesting to us.  For this lab, we will look at 3 contrasts: 
+
+*  Average chimpanzee versus average human
+*  Cerebellum versus Broca's region averaged over species.
+*  The interaction between species and the comparison of cerebellum to Broca's region.
+
+Note that the treatment names are taken from the columns of the design matrix.  To make more useful names for the final output, we will want to rename the columns of the contrast matrix.
+
+---
+
+**Question 7:**
+
+**Below is an example setting up the contrast of the average Chimp versus human effect, and the interaction between species and the two brain regions, cerebellum and Broca region.  I have left out the contrast of Cerebellum versus Broca's region averaged over species.  Set up a command to create the contrast matrix for all 3 of the desired contrasts (i.e. the 2 I already provided plus one more).**  
+
+---
+
+```{r,eval=F}
+colnames(design.trt)
+contrast.matrix=makeContrasts(
+  ChVsHu=(trtsCHBroca+trtsCHCaudate+trtsCHCerebellum+trtsCHPrefrontal)/4
+  -(trtsHUBroca+trtsHUCaudate+trtsHUCerebellum+trtsHUPrefrontal)/4,
+  Interact=(trtsCHCerebellum-trtsHUCerebellum)-(trtsCHBroca-trtsHUBroca),
+  levels=design.trt)
+```
+
+coefficient matrix has one row for each treatment and one column for each contrast. Check this by printing the matrix.
+
+## Compute the estimated contrasts and compute the moderated t-tests for each contrast.
+
+We simply fit the contrast matrix to the previous fitted model:
+
+```{r,eval=F}
+fit.contrast=contrasts.fit(fitTrtMean,contrast.matrix)
+```
+
+The estimated contrasts are in the *coefficients* component of *fit.contrast*.  This is the numerator of the t-test to test whether the contrast is zero.  To compute the t-statistic, we need the standard error of the contrast, which uses the moderated variance for each gene, which is a weighted average of the estimated mean of all the variances and the within gene variance for each gene.
+
+The *eBayes* command will compute the consensus pooled variance, and then use it to compute the empirical Bayes (moderated) pooled variance 
+for each gene.  This also adjusts the degrees of freedom for the contrast t-tests.  The command also computes the t-tests and associated p-values.
+
+```{r,eval=F}
+efit.contrast=eBayes(fit.contrast)
+```
+
+The interesting components of this output are the moderated variances, *s2.post*, the estimated contrasts, which are stored in the component *coefficient* and the contrast 
+p-values,
+which are stored in component *p.value*.
+
+---
+
+**Question 8:**
+
+**a) The pooled sample standard deviations are stored in component *sigma*.  Plot the sample variances (x-axis, \(S_p^2\) versus the moderated variances (y-axis, *s2.post*). Use the *abline* command to add the line y=x.  What do you notice about the moderated variances?  How many of the moderated variances are larger (smaller) than the sample variances?**
+
+**b) The moderated variances are associated with larger degrees of freedom.  If the test statistic is some value (e.g. t=1.78) do higher d.f. make it more or less statistically significant?**
+
+**c) Obtain a histogram of the estimated value of the contrast coefficient for the contrast between cerebellum and Broca's region.  What is the interpretation of the values in this histogram in terms of differential gene expression?**
+
+**d) For the contrast in part c, which probeset has the largest absolute difference in mean(log(expression))?  What is the estimated fold change for this gene?  Is it up or down regulated in cerebellum compared to Broca's region? **
+
+**e) What is the p-value associated with this probeset for the contrast between cerebellum and Broca's region?**
+
+---
+
+##Adjust the p-values.
+
+All of the comparisons have a large percentage of differentially expressing genes.  We will want to use a multiple comparisons procedure that adapts to having a large number of non-null hypotheses such as the Storey method.
+
+*limma* has a number of methods for adjusting the p-values and/or estimating FDR for each p-value.  However, I like Storey's q-value method, because it estimates \(\pi_0\) the percentage of non-differentially expressing genes and uses the estimate in computing the q-value.  We will use the *qvalue* function to do this.
+
+---
+
+**Question 9:**
+
+**a) For each contrast, estimate the q-values. Print the estimated \(\pi_0\) for each contrast and the number of probesets with q<0.05.**
+
+**b) Which contrast appears to have the most differential expression?  Is this what you would expect - why or why not?**
+
+---
+<br>
+<br>
+<br>
+<br>
+
+
+
+

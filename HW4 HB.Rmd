@@ -1,0 +1,233 @@
+---
+title: "HW4"
+author: "Hannah Boyd"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+# Question 1
+
+```{r}
+library(devtools)
+install_github("genomicsclass/GSE5859Subset")
+library(GSE5859Subset)
+data(GSE5859Subset)
+```
+```{r}
+library(genefilter)
+?rowttests
+```
+
+```{r}
+sum(rowttests(geneExpression, as.factor(sampleInfo$group))$p.value < 0.05)
+```
+**Answer: There are 1383 genes with p values smaller than 0.05.**
+
+# Question 2
+
+```{r}
+sum(rowttests(geneExpression, as.factor(sampleInfo$group))$p.value < (0.05/nrow(geneExpression))) 
+```
+**Answer: With the bonferroni corrections, only 10 p values are still significant.**
+
+# Question 3 
+
+```{r}
+pvals = rowttests(geneExpression, as.factor(sampleInfo$group))$p.value
+sum(p.adjust(pvals, method = "fdr", n = length(pvals))<0.05)
+```
+**Answer: Using the p.adjust function, 13 genes have a p value less than 0.05.**
+
+# Question 4 
+
+```{r}
+library(qvalue)
+sum(qvalue(pvals)$qvalues<0.05)
+```
+**Answer: There are 22 genes with q values less than 0.05**
+
+# Question 5
+
+```{r}
+qvalue(pvals)$pi0
+```
+**Answer: The estimated proportion of genes for which the null hypothesis is true is 0.6695739** 
+
+# Question 6
+
+```{r}
+plot(qvalue(pvals)$qvalue/p.adjust(pvals,method="fdr"))
+abline(h=qvalue(pvals)$pi0,col=2)
+```
+
+
+**Answer: C.) the qvalue function estimates the proportion of genes for which the null hypothesis is true and provides a less conservative estimate**
+
+# Question 7
+
+```{r}
+n <- 24
+m <- 8793
+mat <- matrix(rnorm(n*m),m,n)
+```
+
+```{r}
+delta <- 1
+positives <- 500
+mat[1:positives,1:(n/2)] <- mat[1:positives,1:(n/2)]+delta
+```
+
+## Part I - False Positives
+
+```{r}
+set.seed(1)
+library(qvalue)
+library(genefilter)
+n <- 24
+m <- 8793
+m0=8293
+B <- 1000
+delta <-2
+positives <- 500
+g <- factor(rep(c(0,1),each=12))
+result <- replicate(B,{
+  mat <- matrix(rnorm(n*m),m,n)
+  mat[1:positives,1:(n/2)] <- mat[1:positives,1:(n/2)]+delta
+  pvals = rowttests(mat,g)$p.val
+   FP1 <- sum(pvals[-(1:positives)]<=0.05/m)  
+  })
+mean(result/m0)
+```
+
+### p.adjust
+
+```{r}
+set.seed(1)
+library(qvalue)
+library(genefilter)
+n <- 24
+m <- 8793
+m0=8293
+m1=500
+B <- 1000
+delta <-2
+positives <- 500
+g <- factor(rep(c(0,1),each=12))
+result <- replicate(B,{
+  mat <- matrix(rnorm(n*m),m,n)
+  mat[1:positives,1:(n/2)] <- mat[1:positives,1:(n/2)]+delta
+  pvals = rowttests(mat,g)$p.val
+  padj = p.adjust(pvals, method = "fdr", n = m)
+  FP1 <- sum(padj[-(1:positives)]<=0.05)
+  })
+mean(result/m0)
+```
+
+### qvalue
+
+```{r}
+set.seed(1)
+library(qvalue)
+library(genefilter)
+n <- 24
+m <- 8793
+m0=8293
+m1=500
+B <- 1000
+delta <-2
+positives <- 500
+g <- factor(rep(c(0,1),each=12))
+result <- replicate(B,{
+  mat <- matrix(rnorm(n*m),m,n)
+  mat[1:positives,1:(n/2)] <- mat[1:positives,1:(n/2)]+delta
+  pvals = rowttests(mat,g)$p.val
+  padj = qvalue(pvals)$qvalues
+  FP1 <- sum(padj[-(1:positives)]<=0.05)
+  FN1 <- sum(padj[1:positives]>0.05)
+  c(FP1,FN1)
+  })
+mean(result[1,]/m0)
+```
+
+
+## Part II - False Negatives
+
+### Bonferroni
+
+```{r}
+set.seed(1)
+library(qvalue)
+library(genefilter)
+n <- 24
+m <- 8793
+B <- 1000
+m0=8293
+m1=500
+delta <-2
+positives <- 500
+g <- factor(rep(c(0,1),each=12))
+result <- replicate(B,{
+  mat <- matrix(rnorm(n*m),m,n)
+  mat[1:positives,1:(n/2)] <- mat[1:positives,1:(n/2)]+delta
+  pvals = rowttests(mat,g)$p.val
+  ##Bonferroni
+  FP1 <- sum(pvals[-(1:positives)]<=0.05/m)  
+  FN1 <- sum(pvals[1:positives]>0.05/m)
+  c(FP1,FN1)
+})
+mean(result[2,]/m1)
+```
+
+### p.adjust
+
+```{r}
+set.seed(1)
+library(qvalue)
+library(genefilter)
+n <- 24
+m <- 8793
+m0=8293
+m1=500
+B <- 1000
+delta <-2
+positives <- 500
+g <- factor(rep(c(0,1),each=12))
+result <- replicate(B,{
+  mat <- matrix(rnorm(n*m),m,n)
+  mat[1:positives,1:(n/2)] <- mat[1:positives,1:(n/2)]+delta
+  pvals = rowttests(mat,g)$p.val
+  padj = p.adjust(pvals, method = "fdr", n = m)
+  FP1 <- sum(padj[-(1:positives)]<=0.05)
+  FN1 <- sum(padj[1:positives]>0.05)
+  c(FP1,FN1)
+  })
+mean(result[2,]/m1)
+```
+
+
+### qvalue 
+
+```{r}
+set.seed(1)
+library(qvalue)
+library(genefilter)
+n <- 24
+m <- 8793
+m0=8293
+m1=500
+B <- 1000
+delta <-2
+positives <- 500
+g <- factor(rep(c(0,1),each=12))
+result <- replicate(B,{
+  mat <- matrix(rnorm(n*m),m,n)
+  mat[1:positives,1:(n/2)] <- mat[1:positives,1:(n/2)]+delta
+  pvals = rowttests(mat,g)$p.val
+  padj = qvalue(pvals)$qvalues
+  FP1 <- sum(padj[-(1:positives)]<=0.05)
+  FN1 <- sum(padj[1:positives]>0.05)
+  c(FP1,FN1)
+  })
+mean(result[2,]/m1)
+```
+
